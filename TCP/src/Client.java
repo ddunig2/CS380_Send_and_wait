@@ -13,7 +13,7 @@ public class Client {
 	private InetAddress IPAddress;
 	private byte[] sendData;
 	private byte[] receiveData;
-	private int nextInLine;
+	private Stack<Integer> sequenceNumbers;
 	private static int timeOut;
 	private static int size;
 	private int port;
@@ -23,15 +23,13 @@ public class Client {
 		//size=(size of packets)
 		parseArgs(args);
 		Client cl = new Client();
+		//cl.sendPackets();
 		//try to connect
 		if (cl.connect()) {
 			//if we connect succesfuky send packects
 			cl.sendPackets();
 			//try to close
-			if(cl.close()) {
-				//if we can close then
-				//close sockets
-			}
+			cl.close();
 		}
 		
 	}
@@ -43,6 +41,7 @@ public class Client {
 		IPAddress = InetAddress.getByName("localhost");
 		sendData = new byte[1024];
 		receiveData = new byte[1024];
+		sequenceNumbers = new Stack<>();
 		port = 7443;
 	}
 
@@ -68,10 +67,10 @@ public class Client {
 				clientSocket.receive(receivePacket);
 				//check to see if we got an (ack) for our syn
 				if (getPacketType() == 1) {
-					nextInLine = getSqAckNum();
+					sequenceNumbers.push(getSqAckNum());
 					System.out.println(" connected");
 					System.out.println("Sending data to port " + port);
-					System.out.println("this is the next sequence num " + nextInLine);
+					System.out.println("this is the next sequence num " + sequenceNumbers.peek());
 					return true;
 				}
 			} catch (SocketTimeoutException e) {
@@ -87,7 +86,7 @@ public class Client {
 	}
 	
 	//very similar to connect
-	public boolean close() throws IOException {
+	public void close() throws IOException {
 		int i = 0;
 		//set the fyn bit on
 		sendData[0] |= (3 << 0);
@@ -95,22 +94,27 @@ public class Client {
 		// System.out.println(Integer.toBinaryString((int) sendData[0]));
 		while (i < 4) {
 			// sendData[0] = (byte) (sendData[0] | 2);
+			System.out.print("Attempt# " + (i+1));
 			DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, IPAddress, 7443);
 			clientSocket.send(sendPacket);
 			DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
 			// System.out.println(sendData[0] |0);
 			try {
-				System.out.println(getSqAckNum());
 				clientSocket.receive(receivePacket);
 				if (getPacketType() == 1) {
-					return true;
+					//return true;
+					System.out.println(" connection closed");
+					return;
 				}
 			} catch (SocketTimeoutException e) {
+				System.out.println(" failed");
 				// System.out.println("nohting to connect ot at the moment");
 			}
 			i++;
 		}
-		return false;
+		System.out.println("Forece to close!!");
+		clientSocket.close();
+		//return false;
 	}
 	
 	//parse the type of packet we recieved
@@ -121,46 +125,39 @@ public class Client {
 	//parse the sequence number from the header
 	public int getSqAckNum() {
 		//shift our bits to the bit corresponding with the sequence number(3rd and 4th bit)
-		int num = sendData[0] >> 2;
+		int num = receiveData[0] >> 2;
 		return num & 3;
 	}
 	
 	
 	public void sendPackets() throws Exception {
+		clientSocket.setSoTimeout(200);
 		while (true) {
-			int len = inputStream.read(sendData, 1, 180);
-			//System.out.println(len);
-			sendData[0] = (byte) 0xde;
-
-			// for(byte b: sendData) {
-			// System.out.print(UnicodeFormatter.byteToHex(b));
-			// }
-
-			if (len < 32) {
-				System.out.println("This is the end");
+			sendData = new byte[sendData.length];
+			int len = inputStream.read(sendData, 1, 256);
+			//this will set the sequence number
+			sendData[0] |= (sequenceNumbers.peek() << 2);
+			if (len < 1) {
 				break;
 			}
-			//System.out.println(len++);
-			// String sentence = inFromUser.readLine();
-			// sendData = sentence.getBytes();
-			DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, IPAddress, 7443);
+			DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, IPAddress, port);
 			clientSocket.send(sendPacket);
-			DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
-			// clientSocket.setSoTimeout(100);
-			// try {
-
-			// while (i < 10) {
-
-			clientSocket.receive(receivePacket);
-			// }
-
-			// } catch (SocketTimeoutException e) {
-			// System.out.println("timed out");
-			// }
-			String modifiedSentence = new String(receivePacket.getData());
-			System.out.println("FROM SERVER:" + modifiedSentence);
+			while(true) {
+				try {
+					DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+					clientSocket.receive(receivePacket);
+					if(getPacketType() == 1) {
+						if(getSqAckNum() != sequenceNumbers.peek()) {
+							sequenceNumbers.push(getSqAckNum());
+							break;
+						}
+					}
+				}
+				catch (SocketTimeoutException e) {
+					System.out.println("no ack recieved");
+				}
+			}
 		}
-		clientSocket.close();
 	}
 	public static void parseArgs(String args[]) {
 		for (String s : args) {
