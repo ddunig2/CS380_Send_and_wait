@@ -22,7 +22,7 @@ class Server {
 		ser.parseArgs(args);
 		ser.connect();
 		ser.recieveData();
-		
+
 	}
 
 	private void close() {
@@ -33,23 +33,23 @@ class Server {
 	private void recieveData() throws IOException {
 		serverSocket.setSoTimeout(200);
 		// recive packet and out it on the screen
+
 		while (true) {
 			while (true) {
 				try {
-					
+
 					DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
 					serverSocket.receive(receivePacket);
 					if (getPacketType() == 0) {
-						if(getSqAckNum() == sequenceNumbers.peek()) {
-							//toggle sequence numbers
-							
-							sequenceNumbers.push((sequenceNumbers.peek() == 0)? 1:0);
-							//dump to screen
-							System.out.println(new String(receiveData, 1, sendData.length -1));
-							//ask for next packet
+						if (getSqAckNum() == sequenceNumbers.peek()) {
+							// toggle sequence numbers
+							sequenceNumbers.push((sequenceNumbers.peek() == 0) ? 1 : 0);
+							// dump to screen
+							System.out.println(new String(receiveData, 1, sendData.length - 1));
+							// ask for next packet
 							sendData = new byte[1024];
 							sendData[0] |= (1 << 0);
-							sendData[0] |= (sequenceNumbers.peek()<<2);
+							sendData[0] |= (sequenceNumbers.peek() << 2);
 							DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, IPAddress, port);
 							serverSocket.send(sendPacket);
 							break;
@@ -61,6 +61,11 @@ class Server {
 					}
 				} catch (SocketTimeoutException e) {
 					System.out.println("timer ran out");
+					sendData = new byte[1024];
+					sendData[0] |= (1 << 0);
+					sendData[0] |= (sequenceNumbers.peek() << 2);
+					DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, IPAddress, port);
+					serverSocket.send(sendPacket);
 				}
 			}
 
@@ -81,7 +86,6 @@ class Server {
 				break;
 			}
 		}
-
 	}
 
 	public Server() throws SocketException {
