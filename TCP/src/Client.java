@@ -113,7 +113,7 @@ public class Client {
 			}
 			i++;
 		}
-		System.out.println("Forece to close!!");
+		System.out.println("Forced socket to close!!");
 		clientSocket.close();
 		// return false;
 	}
@@ -132,6 +132,7 @@ public class Client {
 	}
 
 	public void sendPackets() throws Exception {
+		//set timeout timer on our client socket
 		clientSocket.setSoTimeout(200);
 		while (true) {
 			System.out.println();
@@ -143,22 +144,29 @@ public class Client {
 			if (len < 1) {
 				break;
 			}
+			//create a packet with our data and send it
 			DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, IPAddress, port);
 			clientSocket.send(sendPacket);
 			while (true) {
 				try {
+					//create a packet that will receive back any data like an ACK from our receiver and receive it
 					DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
 					clientSocket.receive(receivePacket);
+					//if the packet is an ACK
 					if (getPacketType() == 1) {
+						//if the sequence ACK number doesn't equal the one we sent
 						if (getSqAckNum() != sequenceNumbers.peek()) {
+							//push the one we received on to the top of the stack
 							sequenceNumbers.push(getSqAckNum());
 							break;
 						}
 					} else {
+						//send our packet again
 						clientSocket.send(sendPacket);
 					}
 				} catch (SocketTimeoutException e) {
-					System.out.println("no ack recieved");
+					//if the timer runs out, send the packet again
+					System.out.println("No ACK received.");
 					clientSocket.send(sendPacket);
 				}
 			}
